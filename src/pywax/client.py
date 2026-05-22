@@ -198,6 +198,17 @@ class WaxClient:
         raise WaxClientError(f"No SSID matching {name_or_id!r} found on device")
 
     # ------------------------------------------------------------------
+    # Basic settings
+    # ------------------------------------------------------------------
+
+    def get_ap_name(self) -> str:
+        result = self.post({"system": {"basicSettings": {"apName": ""}}})
+        return result["system"]["basicSettings"]["apName"]
+
+    def set_ap_name(self, name: str) -> None:
+        self.post({"system": {"basicSettings": {"apName": name}}})
+
+    # ------------------------------------------------------------------
     # Device facts
     # ------------------------------------------------------------------
 
