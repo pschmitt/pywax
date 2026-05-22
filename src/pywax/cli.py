@@ -60,10 +60,11 @@ def na_or(value: object) -> object:
     return value if value is not None else NA
 
 
-def bool_text(value: object, true_str: str = "yes", false_str: str = "no") -> Text:
+def bool_text(value: object, true_str: str = "yes", false_str: str = "no", invert: bool = False) -> Text:
     if value is None:
         return NA
-    return Text(true_str, style="green") if value else Text(false_str, style="red")
+    true_style, false_style = ("red", "green") if invert else ("green", "red")
+    return Text(true_str, style=true_style) if value else Text(false_str, style=false_style)
 
 
 def make_table(*headers: str) -> Table:
@@ -186,16 +187,16 @@ def cmd_wifi_list(args: argparse.Namespace, client: WaxClient) -> None:
         console.print_json(json.dumps(ssids))
         return
 
-    headers = ["id", "name", "enabled", "hidden", "band", "auth", "enc", "vlan"]
+    headers = ["ID", "NAME", "ENABLED", "HIDDEN", "BAND", "AUTH", "ENC", "VLAN"]
     if args.show_psk:
-        headers.append("psk")
+        headers.append("PSK")
     table = make_table(*headers)
     for s in ssids:
         row: list = [
             s["ssid_id"],
             s["name"],
             bool_text(s["enabled"]),
-            bool_text(s["hidden"], "hidden", "visible"),
+            bool_text(s["hidden"], "hidden", "visible", invert=True),
             s["band"] or NA,
             na_or(s["auth_type"]),
             na_or(s["encryption"]),
@@ -229,7 +230,7 @@ def cmd_wifi_show(ssid_id: str, entry: dict, args: argparse.Namespace) -> None:
         ("ID", s["ssid_id"]),
         ("Name", s["name"]),
         ("Enabled", bool_text(s["enabled"])),
-        ("Hidden", bool_text(s["hidden"], "yes", "no")),
+        ("Hidden", bool_text(s["hidden"], "yes", "no", invert=True)),
         ("Band", s["band"] or "?"),
         ("Auth", str(na_or(s["auth_type"]))),
         ("Encryption", str(na_or(s["encryption"]))),

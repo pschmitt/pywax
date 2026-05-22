@@ -5,18 +5,18 @@ Python library and CLI for managing Netgear WAX access points via their local HT
 ## Installation
 
 ```sh
-pip install "pywax @ git+https://github.com/pschmitt/pywax"
+pip install pywax
 ```
 
-Or run without installing via `uvx`:
+Or run without installing:
 
 ```sh
-uvx --from "pywax @ git+https://github.com/pschmitt/pywax" wax --help
+uv run --with pywax python3 -m pywax --help
 ```
 
 ## Configuration
 
-Credentials can be provided via environment variables or `/etc/wax/credentials`:
+Credentials are read from environment variables or `/etc/wax/credentials`:
 
 ```sh
 # /etc/wax/credentials
@@ -25,17 +25,27 @@ WAX_USERNAME=admin
 WAX_PASSWORD=your-password
 ```
 
+Environment variables (`WAX_HOST`, `WAX_USERNAME`, `WAX_PASSWORD`) take precedence over the file.
+
 ## CLI usage
 
 ```sh
 wax info                          # device facts
-wax ssid                          # list all SSIDs
-wax ssid --psk                    # include pre-shared keys
-wax ssid set SSID1 --enable       # enable an SSID
-wax ssid set brkn-lan --hide      # hide SSID from beacons
-wax ssid set SSID1 --psk new-psk  # change passphrase
-wax ssid set SSID1 --auth-type wpa2_wpa3 --encryption aes
+
+wax wifi                          # list all SSIDs
+wax wifi --psk                    # include pre-shared keys
+wax wifi SSID1                    # show details for SSID1
+wax wifi brkn-lan                 # look up by SSID name
+
+wax wifi SSID1 on                 # enable
+wax wifi SSID1 off                # disable
+wax wifi SSID1 toggle             # flip enabled state
+wax wifi SSID1 hide               # hide from beacons
+wax wifi SSID1 show               # unhide
+wax wifi SSID1 psk s3cr3t         # set passphrase
 ```
+
+`wifi` can be abbreviated as `w`, `wlan`, or `ssid`.
 
 ## Library usage
 
@@ -45,7 +55,16 @@ from pywax import WaxClient
 with WaxClient("10.5.0.3", password="secret") as client:
     facts = client.get_facts()
     ssids = client.get_ssids()
+    client.set_ssid("SSID1", {...})
 ```
+
+## Auth type reference
+
+| `auth_type`  | Description                          |
+|--------------|--------------------------------------|
+| `wpa2`       | WPA2-PSK only                        |
+| `wpa_wpa2`   | WPA + WPA2 mixed                     |
+| `wpa2_wpa3`  | WPA2-PSK + WPA3-SAE (transition)     |
 
 ## Credits
 
