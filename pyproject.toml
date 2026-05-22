@@ -1,0 +1,23 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pywax"
+version = "0.1.0"
+description = "Netgear WAX access point Python library and CLI"
+readme = "README.md"
+license = { text = "GPL-3.0-or-later" }
+authors = [{ name = "Philipp Schmitt", email = "philipp@schmitt.co" }]
+requires-python = ">=3.9"
+dependencies = [
+    "rich>=13",
+    "rich-argparse>=1",
+]
+
+[project.scripts]
+wax = "pywax.cli:main"
+pywax = "pywax.cli:main"
+
+[project.urls]
+Repository = "https://github.com/pschmitt/pywax"
