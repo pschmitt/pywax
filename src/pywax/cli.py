@@ -117,6 +117,9 @@ def cmd_info(args: argparse.Namespace, client: WaxClient) -> None:
 ###############################################################################
 
 
+_IEEE80211W = {0: "disabled", 1: "optional", 2: "required"}
+
+
 def _decode_ssid_entry(ssid_id: str, entry: dict) -> dict:
     """Flatten ssidGetDetails entry into a single summary dict."""
     band = entry.get("band", "?")
@@ -134,6 +137,10 @@ def _decode_ssid_entry(ssid_id: str, entry: dict) -> dict:
         "auth_type": AUTH_TYPES_REV.get(vap.get("authenticationType"), vap.get("authenticationType")),
         "encryption": ENCRYPTION_TYPES_REV.get(vap.get("encryption"), vap.get("encryption")),
         "vlan_id": vap.get("vlanID"),
+        "band_steering": bool(vap.get("bandSteeringStatus", 0)),
+        "client_isolation": bool(vap.get("clientSeparation", 0)),
+        "ieee80211w": _IEEE80211W.get(vap.get("ieee80211w"), vap.get("ieee80211w")),
+        "fast_roaming": bool(vap.get("11rStatus", 0)),
         "psk": vap.get("presharedKey"),
     }
 
@@ -235,6 +242,10 @@ def cmd_wifi_show(ssid_id: str, entry: dict, args: argparse.Namespace) -> None:
         ("Auth", str(na_or(s["auth_type"]))),
         ("Encryption", str(na_or(s["encryption"]))),
         ("VLAN", str(na_or(str(s["vlan_id"]) if s["vlan_id"] is not None else None))),
+        ("Band steering", bool_text(s["band_steering"])),
+        ("Client isolation", bool_text(s["client_isolation"])),
+        ("802.11w (MFP)", str(na_or(s["ieee80211w"]))),
+        ("Fast roaming (11r)", bool_text(s["fast_roaming"])),
     ]
     if args.show_psk:
         rows.append(("PSK", str(na_or(s["psk"]))))
