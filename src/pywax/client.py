@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # Copyright (c) 2026 Philipp Schmitt <philipp@schmitt.co>
 # GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 #
@@ -14,14 +13,14 @@ import urllib.error
 import urllib.request
 
 AUTH_TYPES: dict[str, int] = {
-    "wpa2":      32,
-    "wpa_wpa2":  48,
+    "wpa2": 32,
+    "wpa_wpa2": 48,
     "wpa2_wpa3": 96,
 }
 AUTH_TYPES_REV: dict[int, str] = {v: k for k, v in AUTH_TYPES.items()}
 
 ENCRYPTION_TYPES: dict[str, int] = {
-    "aes":      4,
+    "aes": 4,
     "tkip_aes": 6,
 }
 ENCRYPTION_TYPES_REV: dict[int, str] = {v: k for k, v in ENCRYPTION_TYPES.items()}
@@ -56,7 +55,7 @@ class WaxClient:
         ctx.verify_mode = ssl.CERT_NONE
         self._ctx = ctx
 
-    def __enter__(self) -> "WaxClient":
+    def __enter__(self) -> WaxClient:
         self.login()
         return self
 
@@ -84,14 +83,16 @@ class WaxClient:
         if not self._cookie:
             raise WaxClientError("Login step 1 failed: no lhttpdsid cookie")
 
-        payload = json.dumps({
-            "system": {
-                "basicSettings": {
-                    "adminName": self._username,
-                    "adminPasswd": self._password,
+        payload = json.dumps(
+            {
+                "system": {
+                    "basicSettings": {
+                        "adminName": self._username,
+                        "adminPasswd": self._password,
+                    }
                 }
             }
-        }).encode()
+        ).encode()
 
         result: dict = {}
         for attempt in range(retries):
@@ -165,13 +166,7 @@ class WaxClient:
 
     def get_ssids(self) -> dict:
         """Return the raw ssidGetDetails dict keyed by SSID1, SSID2, ..."""
-        result = self.post({
-            "system": {
-                "wlanSettings": {
-                    "wlanSettingTable": {"ssidGetDetails": ""}
-                }
-            }
-        })
+        result = self.post({"system": {"wlanSettings": {"wlanSettingTable": {"ssidGetDetails": ""}}}})
         return result["system"]["wlanSettings"]["wlanSettingTable"]["ssidGetDetails"]
 
     def set_ssid(self, ssid_id: str, wlan_configs: dict) -> dict:
@@ -179,15 +174,9 @@ class WaxClient:
 
         wlan_configs: { "wlan0": { "vap0": { field: value, ... } }, ... }
         """
-        return self.post({
-            "system": {
-                "wlanSettings": {
-                    "wlanSettingTable": {
-                        "ssidSetDetails": {ssid_id: wlan_configs}
-                    }
-                }
-            }
-        })
+        return self.post(
+            {"system": {"wlanSettings": {"wlanSettingTable": {"ssidSetDetails": {ssid_id: wlan_configs}}}}}
+        )
 
     def resolve_ssid_id(self, name_or_id: str) -> str:
         """Return the API ssid_id for a given name or ssid_id string.
@@ -213,29 +202,31 @@ class WaxClient:
     # ------------------------------------------------------------------
 
     def get_facts(self) -> dict:
-        result = self.post({
-            "system": {
-                "monitor": {
-                    "productId": "",
-                    "totalNumberOfDevices": "",
-                    "sysSerialNumber": "",
-                    "ethernetMacAddress": "",
-                    "sysVersion": "",
-                    "stats": {
-                        "lan":   {"traffic": ""},
-                        "wlan0": {"traffic": "", "channelUtil": ""},
-                        "wlan1": {"traffic": "", "channelUtil": ""},
+        result = self.post(
+            {
+                "system": {
+                    "monitor": {
+                        "productId": "",
+                        "totalNumberOfDevices": "",
+                        "sysSerialNumber": "",
+                        "ethernetMacAddress": "",
+                        "sysVersion": "",
+                        "stats": {
+                            "lan": {"traffic": ""},
+                            "wlan0": {"traffic": "", "channelUtil": ""},
+                            "wlan1": {"traffic": "", "channelUtil": ""},
+                        },
                     },
-                },
-                "basicSettings": {"apName": ""},
+                    "basicSettings": {"apName": ""},
+                }
             }
-        })
+        )
         mon = result["system"]["monitor"]
         return {
-            "ap_name":      result["system"]["basicSettings"]["apName"],
-            "model":        mon["productId"],
-            "firmware":     mon["sysVersion"],
-            "serial":       mon["sysSerialNumber"],
-            "mac_address":  mon["ethernetMacAddress"],
+            "ap_name": result["system"]["basicSettings"]["apName"],
+            "model": mon["productId"],
+            "firmware": mon["sysVersion"],
+            "serial": mon["sysSerialNumber"],
+            "mac_address": mon["ethernetMacAddress"],
             "client_count": int(mon.get("totalNumberOfDevices", 0)),
         }

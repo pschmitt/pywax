@@ -21,3 +21,11 @@ pywax = "pywax.cli:main"
 
 [project.urls]
 Repository = "https://github.com/pschmitt/pywax"
+
+[tool.ruff]
+target-version = "py39"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP"]
+ignore = ["E501"]

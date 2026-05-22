@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # Copyright (c) 2026 Philipp Schmitt <philipp@schmitt.co>
 # GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
@@ -17,8 +16,8 @@ from rich_argparse import RichHelpFormatter
 
 from .client import (
     AUTH_TYPES,
-    ENCRYPTION_TYPES,
     AUTH_TYPES_REV,
+    ENCRYPTION_TYPES,
     ENCRYPTION_TYPES_REV,
     WaxClient,
     WaxClientError,
@@ -81,6 +80,7 @@ def _settable(cfg: dict) -> dict:
 # info
 ###############################################################################
 
+
 def cmd_info(args: argparse.Namespace, client: WaxClient) -> None:
     facts = client.get_facts()
 
@@ -89,18 +89,21 @@ def cmd_info(args: argparse.Namespace, client: WaxClient) -> None:
         return
 
     table = Table(
-        box=None, show_edge=False, pad_edge=False,
-        padding=(0, 2, 0, 0), show_header=False,
+        box=None,
+        show_edge=False,
+        pad_edge=False,
+        padding=(0, 2, 0, 0),
+        show_header=False,
     )
     table.add_column("key", style="bright_black")
     table.add_column("value")
     for key, val in [
-        ("AP Name",  facts["ap_name"]),
-        ("Model",    facts["model"]),
+        ("AP Name", facts["ap_name"]),
+        ("Model", facts["model"]),
         ("Firmware", facts["firmware"]),
-        ("Serial",   facts["serial"]),
-        ("MAC",      facts["mac_address"]),
-        ("Clients",  str(facts["client_count"])),
+        ("Serial", facts["serial"]),
+        ("MAC", facts["mac_address"]),
+        ("Clients", str(facts["client_count"])),
     ]:
         table.add_row(key, str(val))
     console.print(table)
@@ -109,6 +112,7 @@ def cmd_info(args: argparse.Namespace, client: WaxClient) -> None:
 ###############################################################################
 # ssid
 ###############################################################################
+
 
 def _decode_ssid_entry(ssid_id: str, entry: dict) -> dict:
     """Flatten ssidGetDetails entry to a single summary dict."""
@@ -122,15 +126,15 @@ def _decode_ssid_entry(ssid_id: str, entry: dict) -> dict:
                 vap = next(iter(vap_map.values()))
                 break
     return {
-        "ssid_id":    ssid_id,
-        "name":       vap.get("ssid", ""),
-        "enabled":    bool(vap.get("vapProfileStatus", 0)),
-        "hidden":     bool(vap.get("hideNetworkName", 0)),
-        "band":       band,
-        "auth_type":  AUTH_TYPES_REV.get(vap.get("authenticationType"), vap.get("authenticationType")),
+        "ssid_id": ssid_id,
+        "name": vap.get("ssid", ""),
+        "enabled": bool(vap.get("vapProfileStatus", 0)),
+        "hidden": bool(vap.get("hideNetworkName", 0)),
+        "band": band,
+        "auth_type": AUTH_TYPES_REV.get(vap.get("authenticationType"), vap.get("authenticationType")),
         "encryption": ENCRYPTION_TYPES_REV.get(vap.get("encryption"), vap.get("encryption")),
-        "vlan_id":    vap.get("vlanID"),
-        "psk":        vap.get("presharedKey"),
+        "vlan_id": vap.get("vlanID"),
+        "psk": vap.get("presharedKey"),
     }
 
 
@@ -221,6 +225,7 @@ def cmd_ssid_set(args: argparse.Namespace, client: WaxClient) -> None:
 # CLI wiring
 ###############################################################################
 
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="wax",
@@ -228,19 +233,22 @@ def parse_args() -> argparse.Namespace:
         formatter_class=RichHelpFormatter,
     )
     parser.add_argument(
-        "-H", "--host",
+        "-H",
+        "--host",
         default=DEFAULT_HOST,
         metavar="HOST",
         help=f"AP address (default: {DEFAULT_HOST!r}, $WAX_HOST, {CREDENTIALS_FILE})",
     )
     parser.add_argument(
-        "-u", "--username",
+        "-u",
+        "--username",
         default=DEFAULT_USER,
         metavar="USER",
         help="Admin username ($WAX_USERNAME)",
     )
     parser.add_argument(
-        "-p", "--password",
+        "-p",
+        "--password",
         default=DEFAULT_PASSWORD,
         metavar="PASS",
         help="Admin password ($WAX_PASSWORD)",
@@ -253,13 +261,16 @@ def parse_args() -> argparse.Namespace:
     sub.add_parser("info", help="Show device facts (default)", formatter_class=RichHelpFormatter)
 
     ssid_p = sub.add_parser(
-        "ssid", aliases=["wifi", "wlan"],
+        "ssid",
+        aliases=["wifi", "wlan"],
         help="List or configure SSIDs",
         formatter_class=RichHelpFormatter,
     )
     ssid_sub = ssid_p.add_subparsers(dest="ssid_command")
 
-    list_p = ssid_sub.add_parser("list", aliases=["ls"], help="List all SSIDs (default)", formatter_class=RichHelpFormatter)
+    list_p = ssid_sub.add_parser(
+        "list", aliases=["ls"], help="List all SSIDs (default)", formatter_class=RichHelpFormatter
+    )
     list_p.add_argument("--psk", action="store_true", dest="show_psk", default=False, help="Show pre-shared keys")
 
     set_p = ssid_sub.add_parser("set", help="Configure an SSID", formatter_class=RichHelpFormatter)
@@ -275,11 +286,17 @@ def parse_args() -> argparse.Namespace:
 
     set_p.add_argument("--psk", metavar="PSK", default=None, help="WPA pre-shared key")
     set_p.add_argument(
-        "--auth-type", metavar="TYPE", choices=list(AUTH_TYPES), default=None,
+        "--auth-type",
+        metavar="TYPE",
+        choices=list(AUTH_TYPES),
+        default=None,
         help="Authentication type: " + ", ".join(AUTH_TYPES),
     )
     set_p.add_argument(
-        "--encryption", metavar="TYPE", choices=list(ENCRYPTION_TYPES), default=None,
+        "--encryption",
+        metavar="TYPE",
+        choices=list(ENCRYPTION_TYPES),
+        default=None,
         help="Cipher suite: " + ", ".join(ENCRYPTION_TYPES),
     )
     set_p.add_argument("--vlan-id", metavar="N", type=int, default=None, help="802.1Q VLAN ID")
@@ -305,9 +322,7 @@ def main() -> None:
         sys.exit(1)
 
     if not args.password:
-        console_err.print(
-            "[red]No password specified.[/red] Use [bold]-p PASS[/bold] or [bold]$WAX_PASSWORD[/bold]."
-        )
+        console_err.print("[red]No password specified.[/red] Use [bold]-p PASS[/bold] or [bold]$WAX_PASSWORD[/bold].")
         sys.exit(1)
 
     try:
