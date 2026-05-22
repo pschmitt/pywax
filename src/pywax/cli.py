@@ -29,6 +29,8 @@ LOGGER = logging.getLogger(__name__)
 
 CREDENTIALS_FILE = "/etc/wax/credentials"
 
+_WIFI_ACTIONS = ("on", "enable", "off", "disable", "toggle", "hide", "show", "psk")
+
 
 def _load_credentials_file(path: str = CREDENTIALS_FILE) -> dict[str, str]:
     creds: dict[str, str] = {}
@@ -110,21 +112,18 @@ def cmd_info(args: argparse.Namespace, client: WaxClient) -> None:
 
 
 ###############################################################################
-# ssid
+# wifi helpers
 ###############################################################################
 
 
 def _decode_ssid_entry(ssid_id: str, entry: dict) -> dict:
-    """Flatten ssidGetDetails entry to a single summary dict."""
+    """Flatten ssidGetDetails entry into a single summary dict."""
     band = entry.get("band", "?")
-    # First VAP of first wlan band is canonical.
     vap: dict = {}
     for wk in ("wlan0", "wlan1"):
-        if wk in entry and isinstance(entry[wk], dict):
-            vap_map = entry[wk]
-            if vap_map:
-                vap = next(iter(vap_map.values()))
-                break
+        if wk in entry and isinstance(entry[wk], dict) and entry[wk]:
+            vap = next(iter(entry[wk].values()))
+            break
     return {
         "ssid_id": ssid_id,
         "name": vap.get("ssid", ""),
@@ -138,24 +137,61 @@ def _decode_ssid_entry(ssid_id: str, entry: dict) -> dict:
     }
 
 
-def cmd_ssid_list(args: argparse.Namespace, client: WaxClient) -> None:
+def _apply_changes(client: WaxClient, ssid_id: str, entry: dict, **changes: object) -> bool:
+    """Apply a set of field changes across all bands/VAPs. Returns True if anything changed."""
+    field_map = {
+        "enable": ("vapProfileStatus", lambda v: 1 if v else 0),
+        "hidden": ("hideNetworkName", lambda v: 1 if v else 0),
+        "psk": ("presharedKey", lambda v: v),
+        "auth_type": ("authenticationType", lambda v: AUTH_TYPES[v]),
+        "encryption": ("encryption", lambda v: ENCRYPTION_TYPES[v]),
+        "vlan_id": ("vlanID", lambda v: v),
+    }
+
+    changed = False
+    set_payload: dict = {}
+    for wk, vaps in entry.items():
+        if not wk.startswith("wlan") or not isinstance(vaps, dict):
+            continue
+        set_payload[wk] = {}
+        for vap_id, cfg in vaps.items():
+            desired = _settable(cfg)
+            for kwarg, (api_field, coerce) in field_map.items():
+                if kwarg not in changes:
+                    continue
+                new_val = coerce(changes[kwarg])
+                if desired.get(api_field) != new_val:
+                    desired[api_field] = new_val
+                    changed = True
+            set_payload[wk][vap_id] = desired
+
+    if changed:
+        client.set_ssid(ssid_id, set_payload)
+    return changed
+
+
+###############################################################################
+# wifi commands
+###############################################################################
+
+
+def cmd_wifi_list(args: argparse.Namespace, client: WaxClient) -> None:
     raw = client.get_ssids()
     ssids = [_decode_ssid_entry(sid, val) for sid, val in sorted(raw.items())]
 
     if args.json:
-        # strip PSKs unless explicitly requested
-        if not getattr(args, "show_psk", False):
-            for s in ssids:
+        for s in ssids:
+            if not args.show_psk:
                 s.pop("psk", None)
         console.print_json(json.dumps(ssids))
         return
 
     headers = ["id", "name", "enabled", "hidden", "band", "auth", "enc", "vlan"]
-    if getattr(args, "show_psk", False):
+    if args.show_psk:
         headers.append("psk")
     table = make_table(*headers)
     for s in ssids:
-        row = [
+        row: list = [
             s["ssid_id"],
             s["name"],
             bool_text(s["enabled"]),
@@ -165,60 +201,93 @@ def cmd_ssid_list(args: argparse.Namespace, client: WaxClient) -> None:
             na_or(s["encryption"]),
             na_or(str(s["vlan_id"]) if s["vlan_id"] is not None else None),
         ]
-        if getattr(args, "show_psk", False):
+        if args.show_psk:
             row.append(na_or(s["psk"]))
         table.add_row(*row)
     console.print(table)
 
 
-def cmd_ssid_set(args: argparse.Namespace, client: WaxClient) -> None:
-    ssid_id = client.resolve_ssid_id(args.ssid)
-    raw = client.get_ssids()
-    entry = raw[ssid_id]
+def cmd_wifi_show(ssid_id: str, entry: dict, args: argparse.Namespace) -> None:
+    s = _decode_ssid_entry(ssid_id, entry)
 
-    # Build per-band set payload, applying only requested changes.
-    changed = False
-    set_payload: dict = {}
-    for wk, vaps in entry.items():
-        if not wk.startswith("wlan") or not isinstance(vaps, dict):
-            continue
-        set_payload[wk] = {}
-        for vap_id, cfg in vaps.items():
-            desired = _settable(cfg)
-            if args.enable is not None:
-                new_val = 1 if args.enable else 0
-                if desired.get("vapProfileStatus") != new_val:
-                    desired["vapProfileStatus"] = new_val
-                    changed = True
-            if args.hidden is not None:
-                new_val = 1 if args.hidden else 0
-                if desired.get("hideNetworkName") != new_val:
-                    desired["hideNetworkName"] = new_val
-                    changed = True
-            if args.psk is not None and desired.get("presharedKey") != args.psk:
-                desired["presharedKey"] = args.psk
-                changed = True
-            if args.auth_type is not None:
-                new_val = AUTH_TYPES[args.auth_type]
-                if desired.get("authenticationType") != new_val:
-                    desired["authenticationType"] = new_val
-                    changed = True
-            if args.encryption is not None:
-                new_val = ENCRYPTION_TYPES[args.encryption]
-                if desired.get("encryption") != new_val:
-                    desired["encryption"] = new_val
-                    changed = True
-            if args.vlan_id is not None and desired.get("vlanID") != args.vlan_id:
-                desired["vlanID"] = args.vlan_id
-                changed = True
-            set_payload[wk][vap_id] = desired
-
-    if not changed:
-        console_err.print("[bright_black]No changes.[/bright_black]")
+    if args.json:
+        if not args.show_psk:
+            s.pop("psk", None)
+        console.print_json(json.dumps(s))
         return
 
-    client.set_ssid(ssid_id, set_payload)
-    console_err.print(f"[green]SSID {ssid_id} updated.[/green]")
+    table = Table(
+        box=None,
+        show_edge=False,
+        pad_edge=False,
+        padding=(0, 2, 0, 0),
+        show_header=False,
+    )
+    table.add_column("key", style="bright_black")
+    table.add_column("value")
+    rows = [
+        ("ID", s["ssid_id"]),
+        ("Name", s["name"]),
+        ("Enabled", bool_text(s["enabled"])),
+        ("Hidden", bool_text(s["hidden"], "yes", "no")),
+        ("Band", s["band"] or "?"),
+        ("Auth", str(na_or(s["auth_type"]))),
+        ("Encryption", str(na_or(s["encryption"]))),
+        ("VLAN", str(na_or(str(s["vlan_id"]) if s["vlan_id"] is not None else None))),
+    ]
+    if args.show_psk:
+        rows.append(("PSK", str(na_or(s["psk"]))))
+    for key, val in rows:
+        table.add_row(key, val if isinstance(val, Text) else str(val))
+    console.print(table)
+
+
+def cmd_wifi(args: argparse.Namespace, client: WaxClient) -> None:
+    action = args.wifi_action  # on/off/toggle/hide/show/psk or None
+    ssid_arg = args.wifi_ssid  # SSID id/name or None
+
+    # No SSID → list all.
+    if not ssid_arg:
+        cmd_wifi_list(args, client)
+        return
+
+    # Resolve SSID and fetch current state.
+    raw = client.get_ssids()
+    ssid_id = client.resolve_ssid_id(ssid_arg)
+    entry = raw[ssid_id]
+
+    # No action → show info.
+    if not action:
+        cmd_wifi_show(ssid_id, entry, args)
+        return
+
+    # --- mutating actions ---
+
+    if action in ("on", "enable"):
+        changed = _apply_changes(client, ssid_id, entry, enable=True)
+    elif action in ("off", "disable"):
+        changed = _apply_changes(client, ssid_id, entry, enable=False)
+    elif action == "toggle":
+        current_state = _decode_ssid_entry(ssid_id, entry)["enabled"]
+        changed = _apply_changes(client, ssid_id, entry, enable=not current_state)
+    elif action == "hide":
+        changed = _apply_changes(client, ssid_id, entry, hidden=True)
+    elif action == "show":
+        changed = _apply_changes(client, ssid_id, entry, hidden=False)
+    elif action == "psk":
+        passphrase = args.wifi_value
+        if not passphrase:
+            console_err.print("[red]Error:[/red] psk requires a passphrase argument")
+            sys.exit(1)
+        changed = _apply_changes(client, ssid_id, entry, psk=passphrase)
+    else:
+        console_err.print(f"[red]Unknown action:[/red] {action!r}")
+        sys.exit(1)
+
+    if changed:
+        console_err.print(f"[green]{ssid_id}[/green] updated.")
+    else:
+        console_err.print(f"[bright_black]{ssid_id}: no change.[/bright_black]")
 
 
 ###############################################################################
@@ -254,52 +323,37 @@ def parse_args() -> argparse.Namespace:
         help="Admin password ($WAX_PASSWORD)",
     )
     parser.add_argument("-j", "--json", action="store_true", default=False, help="JSON output")
+    parser.add_argument("--psk", action="store_true", dest="show_psk", default=False, help="Show pre-shared keys")
     parser.add_argument("-d", "--debug", action="store_true", default=False, help="Enable debug logging")
 
     sub = parser.add_subparsers(dest="command")
 
     sub.add_parser("info", help="Show device facts (default)", formatter_class=RichHelpFormatter)
 
-    ssid_p = sub.add_parser(
-        "ssid",
-        aliases=["wifi", "wlan"],
-        help="List or configure SSIDs",
+    wifi_p = sub.add_parser(
+        "wifi",
+        aliases=["w", "wlan", "ssid"],
+        help="List or manage WiFi networks",
         formatter_class=RichHelpFormatter,
+        epilog=(
+            "Examples:\n"
+            "  wax wifi                       list all SSIDs\n"
+            "  wax wifi SSID1                 show SSID1 details\n"
+            "  wax wifi brkn-lan on           enable by name\n"
+            "  wax wifi SSID2 toggle          flip enabled state\n"
+            "  wax wifi SSID2 hide            hide from beacons\n"
+            "  wax wifi SSID2 psk s3cr3t      set passphrase\n"
+        ),
     )
-    ssid_sub = ssid_p.add_subparsers(dest="ssid_command")
-
-    list_p = ssid_sub.add_parser(
-        "list", aliases=["ls"], help="List all SSIDs (default)", formatter_class=RichHelpFormatter
+    wifi_p.add_argument("wifi_ssid", nargs="?", metavar="SSID", help="SSID identifier (e.g. SSID1) or name")
+    wifi_p.add_argument(
+        "wifi_action",
+        nargs="?",
+        metavar="ACTION",
+        choices=_WIFI_ACTIONS,
+        help="on|off|toggle|hide|show|psk",
     )
-    list_p.add_argument("--psk", action="store_true", dest="show_psk", default=False, help="Show pre-shared keys")
-
-    set_p = ssid_sub.add_parser("set", help="Configure an SSID", formatter_class=RichHelpFormatter)
-    set_p.add_argument("ssid", metavar="SSID", help="SSID identifier (e.g. SSID1) or name (e.g. brkn-lan)")
-
-    enable_group = set_p.add_mutually_exclusive_group()
-    enable_group.add_argument("--enable", dest="enable", action="store_true", default=None, help="Enable the SSID")
-    enable_group.add_argument("--disable", dest="enable", action="store_false", help="Disable the SSID")
-
-    hidden_group = set_p.add_mutually_exclusive_group()
-    hidden_group.add_argument("--hide", dest="hidden", action="store_true", default=None, help="Hide SSID from beacons")
-    hidden_group.add_argument("--show", dest="hidden", action="store_false", help="Broadcast SSID in beacons")
-
-    set_p.add_argument("--psk", metavar="PSK", default=None, help="WPA pre-shared key")
-    set_p.add_argument(
-        "--auth-type",
-        metavar="TYPE",
-        choices=list(AUTH_TYPES),
-        default=None,
-        help="Authentication type: " + ", ".join(AUTH_TYPES),
-    )
-    set_p.add_argument(
-        "--encryption",
-        metavar="TYPE",
-        choices=list(ENCRYPTION_TYPES),
-        default=None,
-        help="Cipher suite: " + ", ".join(ENCRYPTION_TYPES),
-    )
-    set_p.add_argument("--vlan-id", metavar="N", type=int, default=None, help="802.1Q VLAN ID")
+    wifi_p.add_argument("wifi_value", nargs="?", metavar="VALUE", help="Passphrase (for psk action)")
 
     return parser.parse_args()
 
@@ -330,14 +384,8 @@ def main() -> None:
             cmd = args.command
             if cmd in (None, "info"):
                 cmd_info(args, client)
-            elif cmd in ("ssid", "wifi", "wlan"):
-                ssid_cmd = getattr(args, "ssid_command", None)
-                if ssid_cmd in (None, "list", "ls"):
-                    cmd_ssid_list(args, client)
-                elif ssid_cmd == "set":
-                    cmd_ssid_set(args, client)
-                else:
-                    cmd_ssid_list(args, client)
+            elif cmd in ("wifi", "w", "wlan", "ssid"):
+                cmd_wifi(args, client)
     except WaxClientError as exc:
         console_err.print(f"[red]Error:[/red] {exc}")
         sys.exit(1)
