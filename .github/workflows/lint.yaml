@@ -5,12 +5,21 @@ on: [push, pull_request]
 jobs:
   ruff:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.13", "3.14", "3.15"]
     steps:
       - uses: actions/checkout@v7
 
       - uses: pschmitt/ci-workflows/.github/actions/python-ruff@main
         with:
-          python-version: '3.x'
+          python-version: ${{ matrix.python-version }}
           upgrade-pip: 'false'
           check-path: .
           format-check: 'true'
+
+      - name: Install package and check import
+        run: |
+          python -m pip install .
+          python -c "import pywax"

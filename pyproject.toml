@@ -9,7 +9,13 @@ description = "Netgear WAX access point Python library and CLI"
 readme = "README.md"
 license = { text = "GPL-3.0-or-later" }
 authors = [{ name = "Philipp Schmitt", email = "philipp@schmitt.co" }]
-requires-python = ">=3.9"
+requires-python = ">=3.13"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3.15",
+]
 dependencies = [
     "rich>=13",
     "rich-argparse>=1",
@@ -23,7 +29,7 @@ pywax = "pywax.cli:main"
 Repository = "https://github.com/pschmitt/pywax"
 
 [tool.ruff]
-target-version = "py39"
+target-version = "py313"
 line-length = 120
 
 [tool.ruff.lint]
