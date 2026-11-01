@@ -8,15 +8,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v7
+      - uses: pschmitt/ci-workflows/.github/actions/python-ruff@main
         with:
           python-version: '3.x'
-
-      - name: Install ruff
-        run: pip install ruff
-
-      - name: Lint
-        run: ruff check .
-
-      - name: Format check
-        run: ruff format --check .
+          upgrade-pip: 'false'
+          check-path: .
+          format-check: 'true'
