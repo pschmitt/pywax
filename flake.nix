@@ -15,7 +15,7 @@
         pyPackages = pkgs.python3Packages;
         pywax = pyPackages.buildPythonPackage {
           pname = "pywax";
-          version = "0.1.0";
+          version = (builtins.fromTOML (builtins.readFile ./pyproject.toml)).project.version;
           pyproject = true;
           src = ./.;
           build-system = [ pyPackages.hatchling ];
